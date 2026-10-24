@@ -12,6 +12,9 @@ class Store:
     def __init__(self, path):
         self.db = sqlite3.connect(path)
         self.db.row_factory = sqlite3.Row
+        if self.db.execute('PRAGMA user_version').fetchone()[0] > 2:
+            self.db.close()
+            raise ValueError('Database schema is newer than this application')
         self.db.execute('PRAGMA foreign_keys=ON')
         self.db.executescript('''
         CREATE TABLE IF NOT EXISTS hypotheses (
@@ -32,7 +35,11 @@ class Store:
           description TEXT NOT NULL, max_cost_cents INTEGER NOT NULL CHECK(max_cost_cents>=0),
           status TEXT NOT NULL DEFAULT 'pending', reviewer TEXT, decision_note TEXT,
           created_at TEXT NOT NULL, decided_at TEXT);
-        PRAGMA user_version=1;
+        CREATE TABLE IF NOT EXISTS action_requests (
+          id INTEGER PRIMARY KEY REFERENCES actions(id), spec TEXT NOT NULL,
+          expires_at TEXT NOT NULL, approval_hash TEXT, started_at TEXT, finished_at TEXT,
+          result TEXT, error TEXT, evidence_id INTEGER REFERENCES evidence(id));
+        PRAGMA user_version=2;
         ''')
 
     def close(self):
@@ -70,7 +77,10 @@ class Store:
               ('approved' if approve else 'rejected', reviewer, note, now(), action_id)).rowcount
             if changed != 1:
                 raise ValueError('Action missing or already decided')
+            if approve:
+                from .actions import seal_approval
+                seal_approval(self.db, action_id)
 
     def report(self):
         return {table: [dict(row) for row in self.db.execute(f'SELECT * FROM {table} ORDER BY id')]
-                for table in ('hypotheses', 'evidence', 'runs', 'findings', 'actions')}
+                for table in ('hypotheses', 'evidence', 'runs', 'findings', 'actions', 'action_requests')}

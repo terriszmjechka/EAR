@@ -2,7 +2,7 @@
 
 A minimal executable foundation for the AES research direction: formulate a mechanism, preserve evidence, run a bounded experiment, evaluate it, and retain findings across sessions. Explore resource organization, allocation, information and transformation without requiring a conventional business model. This is not an autonomous income generator.
 
-Python 3.12+; runtime and tests use only the standard library. No API keys, network access, purchases, or third-party runtime packages are needed.
+Python 3.12+; runtime and tests use only the standard library. The demo and tests need no API keys, network access, purchases, or third-party runtime packages. Approved HTTPS evidence collection requires network access.
 
 ## Run a complete cycle
 
@@ -51,25 +51,40 @@ Inputs must contain exactly the four keys in `example-config.json`: 1–1000 int
 
 ## External actions and risk
 
-All external actions, including zero-cost publication or outreach, must be proposed separately:
+EAR can execute explicitly approved public HTTPS GET requests and retain their responses as source evidence. It does not execute arbitrary commands, authenticated APIs, POST requests, purchases, trading, messages, or paid actions. Review a URL carefully: a poorly designed server can give even GET requests side effects. Do not put secrets or action-triggering URLs into research requests.
+
+From a fresh database, create a hypothesis, request an exact fetch, inspect it, approve it as the human operator, then execute:
 
 ```sh
-python -m ear request-action 1 'Describe the exact proposed external action' --max-cost-cents 0
-python -m ear decide-action 1 --decision reject --reviewer 'Your name' --note 'Reason and reviewed scope'
+python -m ear hypothesis 'Can this public source support a research hypothesis?'
+python -m ear request-get 1 https://example.com/ --max-bytes 65536 --expires-hours 24
+python -m ear report
+# Use actual returned IDs; approve only after reviewing the stored request.
+python -m ear decide-action 1 --decision approve --reviewer 'Your name' --note 'Reviewed exact URL, limits, and purpose'
+python -m ear execute-action 1
+python -m ear report
 ```
 
-Requests begin pending. A human can record approval or rejection once with identity and rationale. The CLI trusts the local operator's identity; this is an audit gate, not authentication or tamper resistance. **No external-action executor exists**, even for approved requests. Approval records do not spend money or send anything. Research automation must never approve its own requests. Future integrations must enforce explicit scope, expiry, one-time consumption and financial exposure limits before execution. A proposed maximum cost is not a balance, reservation, or spend authorization. This version has zero real financial exposure from experiments and no purchasing, trading, billing, scheduler, paid model calls or financial ledger.
+Each approval is bound to the exact request, description, hypothesis, zero proposed cost, byte limit, and expiry. Requests expire 1–24 hours after creation, not after approval. A competing process cannot claim the same approval twice. States are pending → approved/rejected → executing → completed/failed. An attempt consumes approval even if it fails; there are no automatic retries. A crash may leave `executing`; investigate before creating another request because the server may already have received it.
+
+Transport accepts HTTPS port 443, blocks nonpublic/multicast/reserved destination addresses, pins the checked address for the connection and verifies TLS against the original hostname. Redirects, compression, credentials and custom headers are unsupported. Responses are capped at the approved limit (maximum 1 MiB, plus one sentinel byte read to detect overflow). A worker has a 15-second total deadline including DNS, with 5-second socket timeouts. Network and platform restrictions still apply. The response's raw bytes are stored as base64 with SHA-256, HTTP status, content type, URL and retrieval time, atomically with the linked evidence and completed action. This proves retrieval, not the source's truth or profitability. Returned content is untrusted data and is never executed.
+
+Generic `request-action` proposals remain available for planning and review, including nonzero proposed cost, but cannot execute through this adapter. Existing version-1 approvals remain historical records and cannot authorize new executable actions. Version-1 databases upgrade automatically by adding `action_requests`; existing records are preserved. Back up research databases before upgrading. Newer unsupported schema versions are rejected.
+
+The local operator supplies the reviewer identity; approval is an audit control, not authentication or protection against someone who can edit the database or run arbitrary Python. Research automation must never approve its own requests. There is no financial ledger or spending integration. Zero proposed cost means the adapter invokes no paid API, not that bandwidth, platform or operational costs cannot exist.
 
 ## Persistence and failure behavior
 
-SQLite foreign keys link hypotheses → evidence/runs → findings. Run states are `running`, `completed`, `failed`. Completed results and findings commit in one transaction. Exceptions mark a run failed and retain the error without inventing a finding. Abrupt process termination may leave `running`; inspect before rerunning (reruns append independent records). Logs contain start/completion/failure events with run IDs and UTC timestamps. SQLite is the authority; a crash may interrupt a log write. Schema version 1 is for fresh databases; migrations are not implemented. Keep private evidence out of shared reports and commits.
+SQLite foreign keys link hypotheses → evidence/runs → findings. Run states are `running`, `completed`, `failed`. Completed results and findings commit in one transaction. Exceptions mark a run failed and retain the error without inventing a finding. Abrupt process termination may leave `running`; inspect before rerunning (reruns append independent records). Logs contain start/completion/failure events with run IDs and UTC timestamps. SQLite is the authority; a crash may interrupt a log write. Schema version 2 supports additive upgrades from version 1. Keep private evidence out of shared reports and commits.
 
 ## Structure and extending the research
 
-- `ear/store.py`: persistent research and approval records.
+- `ear/store.py`: persistent research, approvals, and schema upgrade.
+- `ear/actions.py`: request, approval binding, execution and evidence lifecycle.
+- `ear/http_worker.py`: bounded HTTPS transport in a timed worker.
 - `ear/experiment.py`: deterministic mechanism, validation and model economics.
 - `ear/engine.py`: experiment lifecycle and findings.
 - `ear/__main__.py`: CLI and JSON logging.
-- `tests/test_ear.py`: reproducibility, persistence, adverse economics, bounds, failures, gates and CLI.
+- `tests/test_ear.py` and `tests/test_actions.py`: reproducibility, persistence, adverse economics, bounds, failures, approvals, transport, schema upgrade and CLI.
 
 To add a mechanism, predeclare the resource transformation, baseline, falsification criterion, bounded inputs, direct/coordination costs, provenance, and evidence needed to establish value capture. Implement a reviewed local function, version it, add it to the explicit engine allowlist and CLI, and test adverse cases. Preserve rejected hypotheses and failed acquisitions. Compare technical feasibility, measurable advantage, and retained/collected value separately. This demo validates the research plumbing; it does not establish allocation research as a commercial focus.

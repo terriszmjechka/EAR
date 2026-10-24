@@ -69,7 +69,7 @@ class ResearchTests(unittest.TestCase):
         hid = self.store.hypothesis('Test')
         with self.assertRaises(sqlite3.IntegrityError):
             self.store.evidence(hid, 'fabricated', 'url', 'claim')
-    def test_external_gate_and_no_executor(self):
+    def test_generic_external_requests_remain_non_executable(self):
         hid = self.store.hypothesis('Test external gate')
         aid = self.store.request_action(hid, 'Potential paid pilot', 500)
         self.assertEqual(self.store.report()['actions'][0]['status'], 'pending')
